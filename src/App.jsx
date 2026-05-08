@@ -1,55 +1,192 @@
 import { useMemo, useState } from 'react';
 
-const MODELS = ['Wan 2.1 / Wan 2.2', 'AnimateDiff', 'HunyuanVideo', 'CogVideoX', 'Generic Open Source'];
+const VIDEO_PROVIDERS = [
+  {
+    id: 'replicate-video',
+    name: 'Replicate Video',
+    type: 'video',
+    apiKeyName: 'Replicate API token',
+    docs: 'https://replicate.com/docs',
+    note: 'Best for open-source hosted video models. You must paste a Replicate model version ID.'
+  },
+  {
+    id: 'huggingface-video',
+    name: 'Hugging Face Video',
+    type: 'video',
+    apiKeyName: 'Hugging Face token',
+    docs: 'https://huggingface.co/docs/api-inference/index',
+    note: 'Works only with models enabled for Inference API. Paste model id like owner/model-name.'
+  },
+  {
+    id: 'comfyui-local',
+    name: 'Local ComfyUI',
+    type: 'video',
+    apiKeyName: 'No key needed',
+    docs: 'https://github.com/comfyanonymous/ComfyUI',
+    note: 'Fastest free option if you have GPU. Requires ComfyUI running locally.'
+  }
+];
+
+const IMAGE_PROVIDERS = [
+  {
+    id: 'stability-image',
+    name: 'Stability Image API',
+    type: 'image',
+    apiKeyName: 'Stability API key',
+    docs: 'https://platform.stability.ai/docs',
+    note: 'Good for fast image generation. Needs paid/free credits from Stability.'
+  },
+  {
+    id: 'huggingface-image',
+    name: 'Hugging Face Image',
+    type: 'image',
+    apiKeyName: 'Hugging Face token',
+    docs: 'https://huggingface.co/docs/api-inference/index',
+    note: 'Use Stable Diffusion / Flux style model ids that support image generation.'
+  },
+  {
+    id: 'replicate-image',
+    name: 'Replicate Image',
+    type: 'image',
+    apiKeyName: 'Replicate API token',
+    docs: 'https://replicate.com/docs',
+    note: 'Works with many open-source image models hosted on Replicate.'
+  }
+];
+
 const STYLES = ['Cinematic Horror', 'Dark Finance Story', 'Anime Horror', 'Realistic Documentary', 'Brainrot Meme', 'Indian Suspense'];
 const ASPECTS = ['9:16 YouTube Shorts', '16:9 YouTube', '1:1 Social'];
 
-const sceneIdeas = {
-  'Cinematic Horror': 'abandoned hospital corridor at 2 AM, flickering lights, wet floor, shadow figure at the end of the hallway',
-  'Dark Finance Story': 'young man checking bank balance in a dark room, bills around him, phone light on his worried face',
-  'Anime Horror': 'anime boy entering a cursed train station under a red moon, empty platform, black smoke in the distance',
-  'Realistic Documentary': 'wildlife camera tracking a dangerous animal in a foggy forest, tense documentary style',
-  'Brainrot Meme': 'low-poly businessman chased by a giant tax monster inside a surreal office',
-  'Indian Suspense': 'young Indian man walking through a quiet narrow lane during a power cut, one flickering street light'
-};
-
-function buildPrompt({ style, model, subject, aspect, duration, motion }) {
-  const defaultScene = sceneIdeas[style] || sceneIdeas['Cinematic Horror'];
-  const cleanSubject = subject.trim() || defaultScene;
+function getPrompt(style, subject, aspect, duration) {
   const ratio = aspect.startsWith('9:16') ? 'vertical 9:16, 1080x1920' : aspect.startsWith('16:9') ? 'wide 16:9, 1920x1080' : 'square 1:1, 1080x1080';
-
-  return `MODEL: ${model}\nSTYLE: ${style}\nDURATION: ${duration} seconds\nFORMAT: ${ratio}\n\nPROMPT:\n${cleanSubject}. Create a cinematic AI video with realistic movement, strong atmosphere, detailed environment, dramatic lighting, clean subject focus, no text on screen, no watermark.\n\nCAMERA MOTION:\n${motion || 'slow handheld push-in, subtle camera shake, tense pacing, smooth natural movement'}\n\nACTION:\nThe subject moves naturally through the scene, notices something strange, pauses with fear, then the final seconds reveal a disturbing detail in the background.\n\nNEGATIVE PROMPT:\nlow quality, blurry, distorted face, extra limbs, bad anatomy, text, captions, watermark, logo, oversaturated, flickering artifacts, broken hands, duplicate characters, unstable motion.`;
+  return `${subject}. ${style}. ${ratio}. ${duration} seconds. cinematic lighting, detailed environment, realistic motion, strong atmosphere, sharp focus, smooth camera movement, no text, no watermark, no logo.`;
 }
 
-function buildWorkflow(model) {
-  if (model.includes('Wan')) {
-    return 'Use ComfyUI + Wan. Paste the prompt into your Wan text-to-video or image-to-video workflow. Keep clips 4-6 seconds. For consistent characters, create one image first and reuse it for image-to-video.';
+function safeJson(value) {
+  try {
+    return JSON.stringify(JSON.parse(value), null, 2);
+  } catch {
+    return value;
   }
-  if (model.includes('AnimateDiff')) {
-    return 'Use ComfyUI or Automatic1111 + AnimateDiff. Add a Stable Diffusion checkpoint, motion module, and ControlNet/reference image for consistent characters.';
+}
+
+async function callJsonApi({ url, method = 'POST', token, body, headers = {} }) {
+  const response = await fetch(url, {
+    method,
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...headers
+    },
+    body: body ? JSON.stringify(body) : undefined
+  });
+
+  const text = await response.text();
+  if (!response.ok) {
+    throw new Error(`${response.status} ${response.statusText}\n${text}`);
   }
-  return 'Generate a reference image first, then use image-to-video. Keep each clip short, create multiple variations, and edit the best clips together in CapCut or DaVinci Resolve.';
+  try {
+    return JSON.parse(text);
+  } catch {
+    return text;
+  }
 }
 
 export default function App() {
-  const [model, setModel] = useState('Wan 2.1 / Wan 2.2');
+  const [tab, setTab] = useState('video');
+  const [provider, setProvider] = useState('replicate-video');
   const [style, setStyle] = useState('Cinematic Horror');
   const [aspect, setAspect] = useState('9:16 YouTube Shorts');
   const [duration, setDuration] = useState('5');
   const [subject, setSubject] = useState('A terrified young man walking alone through an abandoned hospital corridor at night');
-  const [motion, setMotion] = useState('slow handheld camera push-in, flickering lights, shadow movement behind the character, tense final reveal');
-  const [copied, setCopied] = useState('');
+  const [negative, setNegative] = useState('low quality, blurry, distorted face, extra limbs, bad anatomy, text, watermark, logo, bad motion');
+  const [apiKey, setApiKey] = useState(localStorage.getItem('ai_video_api_key') || '');
+  const [modelId, setModelId] = useState(localStorage.getItem('ai_video_model_id') || '');
+  const [comfyUrl, setComfyUrl] = useState(localStorage.getItem('comfy_url') || 'http://127.0.0.1:8188');
+  const [customPayload, setCustomPayload] = useState('{\n  "input": {\n    "prompt": "{{PROMPT}}",\n    "negative_prompt": "{{NEGATIVE}}"\n  }\n}');
+  const [status, setStatus] = useState('Ready');
+  const [result, setResult] = useState('');
 
-  const prompt = useMemo(() => buildPrompt({ model, style, aspect, duration, subject, motion }), [model, style, aspect, duration, subject, motion]);
-  const workflow = useMemo(() => buildWorkflow(model), [model]);
+  const providers = tab === 'video' ? VIDEO_PROVIDERS : IMAGE_PROVIDERS;
+  const activeProvider = providers.find((item) => item.id === provider) || providers[0];
+  const prompt = useMemo(() => getPrompt(style, subject, aspect, duration), [style, subject, aspect, duration]);
 
-  async function copyText(text, label) {
+  function saveSettings() {
+    localStorage.setItem('ai_video_api_key', apiKey);
+    localStorage.setItem('ai_video_model_id', modelId);
+    localStorage.setItem('comfy_url', comfyUrl);
+    setStatus('Settings saved locally in this browser.');
+  }
+
+  async function copyPrompt() {
+    await navigator.clipboard.writeText(prompt);
+    setStatus('Prompt copied.');
+  }
+
+  function buildPayload() {
+    const replaced = customPayload
+      .replaceAll('{{PROMPT}}', prompt.replaceAll('"', '\\"'))
+      .replaceAll('{{NEGATIVE}}', negative.replaceAll('"', '\\"'));
+    return JSON.parse(replaced);
+  }
+
+  async function generate() {
+    setStatus('Generating request...');
+    setResult('');
+
     try {
-      await navigator.clipboard.writeText(text);
-      setCopied(label);
-      setTimeout(() => setCopied(''), 1200);
-    } catch {
-      alert('Copy failed. Select the text manually.');
+      if (provider === 'replicate-video' || provider === 'replicate-image') {
+        if (!apiKey) throw new Error('Add your Replicate API token first.');
+        if (!modelId) throw new Error('Add a Replicate model version ID first.');
+        const payload = buildPayload();
+        const data = await callJsonApi({
+          url: 'https://api.replicate.com/v1/predictions',
+          token: apiKey,
+          body: { version: modelId, ...payload }
+        });
+        setResult(safeJson(JSON.stringify(data, null, 2)));
+        setStatus('Replicate prediction created. Open the URL/status from the result to track it.');
+        return;
+      }
+
+      if (provider === 'huggingface-video' || provider === 'huggingface-image') {
+        if (!apiKey) throw new Error('Add your Hugging Face token first.');
+        if (!modelId) throw new Error('Add Hugging Face model id first, like owner/model-name.');
+        const data = await callJsonApi({
+          url: `https://api-inference.huggingface.co/models/${modelId}`,
+          token: apiKey,
+          body: { inputs: prompt, parameters: { negative_prompt: negative } }
+        });
+        setResult(typeof data === 'string' ? data : safeJson(JSON.stringify(data, null, 2)));
+        setStatus('Hugging Face request finished. Some models return a file/blob or require waiting.');
+        return;
+      }
+
+      if (provider === 'stability-image') {
+        if (!apiKey) throw new Error('Add your Stability API key first.');
+        const data = await callJsonApi({
+          url: 'https://api.stability.ai/v2beta/stable-image/generate/core',
+          token: apiKey,
+          headers: { Accept: 'application/json' },
+          body: { prompt, negative_prompt: negative, aspect_ratio: aspect.startsWith('9:16') ? '9:16' : aspect.startsWith('16:9') ? '16:9' : '1:1', output_format: 'png' }
+        });
+        setResult(safeJson(JSON.stringify(data, null, 2)));
+        setStatus('Stability image request sent.');
+        return;
+      }
+
+      if (provider === 'comfyui-local') {
+        const data = await callJsonApi({
+          url: `${comfyUrl.replace(/\/$/, '')}/prompt`,
+          body: buildPayload()
+        });
+        setResult(safeJson(JSON.stringify(data, null, 2)));
+        setStatus('ComfyUI prompt sent. Your workflow must be valid ComfyUI JSON.');
+        return;
+      }
+    } catch (error) {
+      setStatus('Error');
+      setResult(error.message || String(error));
     }
   }
 
@@ -57,9 +194,13 @@ export default function App() {
     <main className="page">
       <section className="hero">
         <div>
-          <p className="eyebrow">OPEN SOURCE AI VIDEO PROMPT STUDIO</p>
-          <h1>AI Video Generator</h1>
-          <p className="subtitle">Create prompts for Wan, AnimateDiff, HunyuanVideo, CogVideoX and ComfyUI workflows.</p>
+          <p className="eyebrow">FAST AI IMAGE + VIDEO PANEL</p>
+          <h1>Generate images and videos with APIs or local ComfyUI</h1>
+          <p className="subtitle">Use hosted APIs for speed or connect your own free open-source ComfyUI setup. API keys are saved only in your browser local storage.</p>
+          <div className="tabs">
+            <button className={tab === 'video' ? 'active' : ''} onClick={() => { setTab('video'); setProvider('replicate-video'); }}>Video</button>
+            <button className={tab === 'image' ? 'active' : ''} onClick={() => { setTab('image'); setProvider('stability-image'); }}>Image</button>
+          </div>
         </div>
         <div className="miniCard">
           <strong>{duration}s</strong>
@@ -68,54 +209,79 @@ export default function App() {
       </section>
 
       <section className="grid">
-        <div className="panel">
-          <h2>Generator Settings</h2>
-          <label>Video model
-            <select value={model} onChange={(e) => setModel(e.target.value)}>
-              {MODELS.map((item) => <option key={item} value={item}>{item}</option>)}
-            </select>
-          </label>
-
+        <div className="panel controls">
+          <h2>1. Prompt Settings</h2>
           <label>Style
-            <select value={style} onChange={(e) => setStyle(e.target.value)}>
-              {STYLES.map((item) => <option key={item} value={item}>{item}</option>)}
-            </select>
+            <select value={style} onChange={(e) => setStyle(e.target.value)}>{STYLES.map((item) => <option key={item}>{item}</option>)}</select>
           </label>
-
-          <label>Aspect ratio
-            <select value={aspect} onChange={(e) => setAspect(e.target.value)}>
-              {ASPECTS.map((item) => <option key={item} value={item}>{item}</option>)}
-            </select>
+          <label>Aspect
+            <select value={aspect} onChange={(e) => setAspect(e.target.value)}>{ASPECTS.map((item) => <option key={item}>{item}</option>)}</select>
           </label>
-
-          <label>Clip duration
+          <label>Duration
             <input value={duration} onChange={(e) => setDuration(e.target.value)} />
           </label>
-
-          <label>Main scene
+          <label>Main prompt
             <textarea rows="5" value={subject} onChange={(e) => setSubject(e.target.value)} />
           </label>
-
-          <label>Motion direction
-            <textarea rows="5" value={motion} onChange={(e) => setMotion(e.target.value)} />
+          <label>Negative prompt
+            <textarea rows="4" value={negative} onChange={(e) => setNegative(e.target.value)} />
           </label>
+          <button onClick={copyPrompt}>Copy Prompt</button>
+        </div>
+
+        <div className="panel controls">
+          <h2>2. Provider</h2>
+          <label>Generation provider
+            <select value={provider} onChange={(e) => setProvider(e.target.value)}>{providers.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select>
+          </label>
+          <p className="note"><b>{activeProvider.name}</b>: {activeProvider.note}</p>
+          <a className="docLink" href={activeProvider.docs} target="_blank" rel="noreferrer">Open provider docs</a>
+
+          {provider !== 'comfyui-local' && (
+            <>
+              <label>{activeProvider.apiKeyName}
+                <input type="password" value={apiKey} onChange={(e) => setApiKey(e.target.value)} placeholder="Paste API key/token" />
+              </label>
+              <label>Model id / version id
+                <input value={modelId} onChange={(e) => setModelId(e.target.value)} placeholder="Example: owner/model or Replicate version hash" />
+              </label>
+            </>
+          )}
+
+          {provider === 'comfyui-local' && (
+            <label>ComfyUI URL
+              <input value={comfyUrl} onChange={(e) => setComfyUrl(e.target.value)} />
+            </label>
+          )}
+          <button onClick={saveSettings}>Save Settings</button>
+        </div>
+      </section>
+
+      <section className="grid wideGrid">
+        <div className="panel output">
+          <div className="topRow">
+            <h2>Generated Prompt</h2>
+            <button onClick={copyPrompt}>Copy</button>
+          </div>
+          <pre>{prompt}</pre>
         </div>
 
         <div className="panel output">
           <div className="topRow">
-            <h2>Video Prompt</h2>
-            <button onClick={() => copyText(prompt, 'prompt')}>{copied === 'prompt' ? 'Copied' : 'Copy Prompt'}</button>
+            <h2>API Payload Template</h2>
           </div>
-          <pre>{prompt}</pre>
+          <textarea className="payloadBox" rows="14" value={customPayload} onChange={(e) => setCustomPayload(e.target.value)} />
+          <p className="note">Use {'{{PROMPT}}'} and {'{{NEGATIVE}}'} placeholders. For ComfyUI, paste your full workflow JSON here.</p>
         </div>
       </section>
 
-      <section className="panel workflow">
+      <section className="panel resultPanel">
         <div className="topRow">
-          <h2>How to Generate Video</h2>
-          <button onClick={() => copyText(workflow, 'workflow')}>{copied === 'workflow' ? 'Copied' : 'Copy'}</button>
+          <h2>3. Generate</h2>
+          <button className="generate" onClick={generate}>Generate {tab === 'video' ? 'Video' : 'Image'}</button>
         </div>
-        <pre>{workflow}</pre>
+        <p className="status">Status: {status}</p>
+        <pre>{result || 'Result will appear here. For hosted APIs, you may receive a prediction/status URL first. For ComfyUI, your local workflow must already be installed and working.'}</pre>
       </section>
     </main>
   );
