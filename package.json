@@ -1,1 +1,1 @@
-{"scripts":{"dev":"vite --host 0.0.0.0","build":"vite build","preview":"vite preview"},"dependencies":{"@vitejs/plugin-react":"latest","vite":"latest","react":"latest","react-dom":"latest"},"devDependencies":{}}
+{"scripts":{"dev":"concurrently \"vite --host 0.0.0.0\" \"node server.js\"","frontend":"vite --host 0.0.0.0","server":"node server.js","build":"vite build","preview":"vite preview"},"dependencies":{"@vitejs/plugin-react":"latest","vite":"latest","react":"latest","react-dom":"latest","express":"latest","cors":"latest","concurrently":"latest"},"devDependencies":{}}
