@@ -7,7 +7,7 @@ const VIDEO_PROVIDERS = [
     type: 'video',
     apiKeyName: 'Replicate API token',
     docs: 'https://replicate.com/docs',
-    note: 'Best for open-source hosted video models. You must paste a Replicate model version ID.'
+    note: 'Use a Replicate model slug like owner/model-name OR a long version hash. Model slug is easier.'
   },
   {
     id: 'huggingface-video',
@@ -50,12 +50,14 @@ const IMAGE_PROVIDERS = [
     type: 'image',
     apiKeyName: 'Replicate API token',
     docs: 'https://replicate.com/docs',
-    note: 'Works with many open-source image models hosted on Replicate.'
+    note: 'Use a Replicate model slug like owner/model-name OR a long version hash. Model slug is easier.'
   }
 ];
 
 const STYLES = ['Cinematic Horror', 'Dark Finance Story', 'Anime Horror', 'Realistic Documentary', 'Brainrot Meme', 'Indian Suspense'];
 const ASPECTS = ['9:16 YouTube Shorts', '16:9 YouTube', '1:1 Social'];
+const VIDEO_MODEL_EXAMPLES = ['kwaivgi/kling-v1.6-standard', 'minimax/video-01', 'lucataco/hunyuan-video'];
+const IMAGE_MODEL_EXAMPLES = ['black-forest-labs/flux-schnell', 'stability-ai/sdxl', 'bytedance/sdxl-lightning-4step'];
 
 function getPrompt(style, subject, aspect, duration) {
   const ratio = aspect.startsWith('9:16') ? 'vertical 9:16, 1080x1920' : aspect.startsWith('16:9') ? 'wide 16:9, 1920x1080' : 'square 1:1, 1080x1080';
@@ -92,6 +94,14 @@ async function callJsonApi({ url, method = 'POST', token, body, headers = {} }) 
   }
 }
 
+function isReplicateVersionHash(value) {
+  return /^[a-f0-9]{32,}$/i.test(value.trim());
+}
+
+function isReplicateModelSlug(value) {
+  return /^[a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.-]+$/.test(value.trim());
+}
+
 export default function App() {
   const [tab, setTab] = useState('video');
   const [provider, setProvider] = useState('replicate-video');
@@ -110,6 +120,7 @@ export default function App() {
   const providers = tab === 'video' ? VIDEO_PROVIDERS : IMAGE_PROVIDERS;
   const activeProvider = providers.find((item) => item.id === provider) || providers[0];
   const prompt = useMemo(() => getPrompt(style, subject, aspect, duration), [style, subject, aspect, duration]);
+  const examples = tab === 'video' ? VIDEO_MODEL_EXAMPLES : IMAGE_MODEL_EXAMPLES;
 
   function saveSettings() {
     localStorage.setItem('ai_video_api_key', apiKey);
@@ -137,15 +148,25 @@ export default function App() {
     try {
       if (provider === 'replicate-video' || provider === 'replicate-image') {
         if (!apiKey) throw new Error('Add your Replicate API token first.');
-        if (!modelId) throw new Error('Add a Replicate model version ID first.');
+        if (!modelId) throw new Error('Add a Replicate model slug like owner/model-name, or a long version hash.');
         const payload = buildPayload();
-        const data = await callJsonApi({
-          url: 'https://api.replicate.com/v1/predictions',
-          token: apiKey,
-          body: { version: modelId, ...payload }
-        });
+        const cleanModel = modelId.trim();
+        let url = 'https://api.replicate.com/v1/predictions';
+        let body = payload;
+
+        if (isReplicateModelSlug(cleanModel)) {
+          const [owner, name] = cleanModel.split('/');
+          url = `https://api.replicate.com/v1/models/${owner}/${name}/predictions`;
+          body = payload;
+        } else if (isReplicateVersionHash(cleanModel)) {
+          body = { version: cleanModel, ...payload };
+        } else {
+          throw new Error('Replicate model must look like owner/model-name or a long version hash. Example: black-forest-labs/flux-schnell');
+        }
+
+        const data = await callJsonApi({ url, token: apiKey, body });
         setResult(safeJson(JSON.stringify(data, null, 2)));
-        setStatus('Replicate prediction created. Open the URL/status from the result to track it.');
+        setStatus('Replicate prediction created. Copy/open the URLs from the result to track output.');
         return;
       }
 
@@ -242,9 +263,17 @@ export default function App() {
               <label>{activeProvider.apiKeyName}
                 <input type="password" value={apiKey} onChange={(e) => setApiKey(e.target.value)} placeholder="Paste API key/token" />
               </label>
-              <label>Model id / version id
-                <input value={modelId} onChange={(e) => setModelId(e.target.value)} placeholder="Example: owner/model or Replicate version hash" />
+              <label>Model slug or version hash
+                <input value={modelId} onChange={(e) => setModelId(e.target.value)} placeholder="Example: owner/model-name" />
               </label>
+              {(provider === 'replicate-video' || provider === 'replicate-image') && (
+                <div className="exampleBox">
+                  <p className="note"><b>No version?</b> Use a model slug instead. Try one example:</p>
+                  <div className="exampleBtns">
+                    {examples.map((item) => <button key={item} onClick={() => setModelId(item)}>{item}</button>)}
+                  </div>
+                </div>
+              )}
             </>
           )}
 
