@@ -11,15 +11,15 @@ app.get('/health', (req, res) => {
   res.json({ ok: true, message: 'AI generation proxy running' });
 });
 
-async function forwardJson({ url, token, body, headers = {} }) {
+async function forwardJson({ url, token, body, headers = {}, method = 'POST' }) {
   const response = await fetch(url, {
-    method: 'POST',
+    method,
     headers: {
       'Content-Type': 'application/json',
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...headers
     },
-    body: JSON.stringify(body)
+    body: body ? JSON.stringify(body) : undefined
   });
 
   const text = await response.text();
@@ -101,6 +101,23 @@ app.post('/api/generate', async (req, res) => {
     }
 
     return res.status(400).json({ error: `Unknown provider: ${provider}` });
+  } catch (error) {
+    return res.status(500).json({ error: error.message || String(error) });
+  }
+});
+
+app.post('/api/replicate-status', async (req, res) => {
+  try {
+    const { apiKey, predictionId } = req.body;
+    if (!apiKey) return res.status(400).json({ error: 'Missing Replicate API token' });
+    if (!predictionId) return res.status(400).json({ error: 'Missing prediction ID' });
+
+    const result = await forwardJson({
+      url: `https://api.replicate.com/v1/predictions/${predictionId}`,
+      token: apiKey,
+      method: 'GET'
+    });
+    return res.status(result.ok ? 200 : result.status).json(result);
   } catch (error) {
     return res.status(500).json({ error: error.message || String(error) });
   }
