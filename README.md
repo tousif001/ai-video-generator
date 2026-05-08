@@ -1,16 +1,18 @@
 # AI Video Generator Prompt Studio
 
-A free React starter app for creating cinematic AI video prompts for open-source video generation workflows like Wan, AnimateDiff, HunyuanVideo, CogVideoX and ComfyUI.
+A React dashboard for creating prompts and sending image/video generation requests to hosted APIs or a local ComfyUI server.
 
-> Important: this web app generates prompts and workflow instructions. Actual AI video generation requires a local/open-source backend such as ComfyUI with Wan or AnimateDiff installed.
+> Important: do not commit API tokens to GitHub. Paste keys only inside the running website UI. The app saves them in your browser local storage, not in the repository.
 
 ## Features
 
-- Prompt generator for horror, finance stories, anime, documentaries, brainrot and Indian suspense
-- Model presets for Wan, AnimateDiff, HunyuanVideo and CogVideoX
-- Copy buttons for prompts and workflow steps
-- Creative responsive UI
-- No paid API required
+- Video generation panel
+- Image generation panel
+- Prompt builder for horror, finance stories, anime, documentaries, brainrot and Indian suspense
+- Provider options for Replicate, Hugging Face, Stability image API and Local ComfyUI
+- API payload editor
+- Copy prompt button
+- Result/status panel
 
 ## Run locally
 
@@ -19,7 +21,44 @@ npm install
 npm run dev
 ```
 
-Open the local URL shown in your terminal.
+Open the local URL shown in your terminal, usually:
+
+```text
+http://localhost:5173/
+```
+
+## How to add your API token safely
+
+1. Start the app with `npm run dev`.
+2. Open `http://localhost:5173/`.
+3. Select the provider, for example `Replicate Video`.
+4. Paste your API token in the API key box.
+5. Add the model/version ID required by that provider.
+6. Click `Save Settings`.
+7. Click `Generate Video` or `Generate Image`.
+
+Do not paste real API tokens into files like `README.md`, `App.jsx`, `.env`, or GitHub commits.
+
+## If your token was exposed
+
+If you pasted a real token in a public place, revoke it from the provider dashboard and create a new token.
+
+## Local free generation with ComfyUI
+
+For totally free local generation:
+
+1. Install ComfyUI.
+2. Install a supported image/video workflow such as Wan or AnimateDiff.
+3. Run ComfyUI locally.
+4. In this app, choose `Local ComfyUI`.
+5. Use this URL:
+
+```text
+http://127.0.0.1:8188
+```
+
+6. Paste your valid ComfyUI workflow JSON in the payload box.
+7. Click Generate.
 
 ## Build
 
@@ -27,34 +66,6 @@ Open the local URL shown in your terminal.
 npm run build
 npm run preview
 ```
-
-## Recommended open-source video setup
-
-### Option 1: Wan + ComfyUI
-
-1. Install ComfyUI.
-2. Download Wan video model files from the official model source.
-3. Place model files in the correct ComfyUI model folders.
-4. Use this app to create prompts.
-5. Paste prompts into your Wan ComfyUI workflow.
-6. Generate short clips, then edit them together in CapCut, DaVinci Resolve or Premiere Pro.
-
-### Option 2: AnimateDiff + Stable Diffusion
-
-1. Install ComfyUI or Automatic1111.
-2. Add a Stable Diffusion checkpoint.
-3. Add AnimateDiff motion modules.
-4. Use ControlNet/reference images for character consistency.
-5. Generate 4-6 second clips.
-
-## Best settings for YouTube Shorts
-
-- Aspect ratio: 9:16
-- Clip length: 4-6 seconds
-- Keep one subject per clip
-- Use image-to-video for character consistency
-- Generate multiple variations and choose the cleanest one
-- Add voiceover, music and sound effects in your video editor
 
 ## License
 
