@@ -31,10 +31,13 @@ async function forwardJson({ url, token, body, headers = {}, method = 'POST' }) 
     data = text;
   }
 
-  if (!response.ok) {
-    return { ok: false, status: response.status, statusText: response.statusText, data };
-  }
-  return { ok: true, status: response.status, data };
+  return {
+    ok: response.ok,
+    status: response.status,
+    statusText: response.statusText,
+    requestUrl: url,
+    data
+  };
 }
 
 function isReplicateVersionHash(value) {
@@ -43,6 +46,11 @@ function isReplicateVersionHash(value) {
 
 function isReplicateModelSlug(value) {
   return /^[a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.-]+$/.test(String(value || '').trim());
+}
+
+function normalizeReplicatePayload(payload = {}) {
+  if (payload.input) return payload;
+  return { input: payload };
 }
 
 app.post('/api/generate', async (req, res) => {
@@ -57,18 +65,24 @@ app.post('/api/generate', async (req, res) => {
 
       const cleanModel = String(modelId).trim();
       let url = 'https://api.replicate.com/v1/predictions';
-      let body = payload || {};
+      let body = normalizeReplicatePayload(payload || {});
 
       if (isReplicateModelSlug(cleanModel)) {
-        const [owner, name] = cleanModel.split('/');
+        const [owner, name] = cleanModel.split('/').map(encodeURIComponent);
         url = `https://api.replicate.com/v1/models/${owner}/${name}/predictions`;
       } else if (isReplicateVersionHash(cleanModel)) {
-        body = { version: cleanModel, ...(payload || {}) };
+        body = { version: cleanModel, ...body };
       } else {
         return res.status(400).json({ error: 'Replicate model must be owner/model-name or a long version hash.' });
       }
 
-      const result = await forwardJson({ url, token: apiKey, body });
+      const result = await forwardJson({
+        url,
+        token: apiKey,
+        body,
+        headers: { Prefer: 'wait' }
+      });
+
       return res.status(result.ok ? 200 : result.status).json(result);
     }
 
@@ -114,7 +128,7 @@ app.post('/api/replicate-status', async (req, res) => {
     if (!predictionId) return res.status(400).json({ error: 'Missing prediction ID' });
 
     const result = await forwardJson({
-      url: `https://api.replicate.com/v1/predictions/${predictionId}`,
+      url: `https://api.replicate.com/v1/predictions/${encodeURIComponent(predictionId)}`,
       token: apiKey,
       method: 'GET'
     });
