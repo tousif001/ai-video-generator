@@ -4,6 +4,7 @@ const VIDEO_MODELS = ['kwaivgi/kling-v1.6-standard', 'minimax/video-01', 'lucata
 const IMAGE_MODELS = ['black-forest-labs/flux-schnell', 'stability-ai/sdxl', 'bytedance/sdxl-lightning-4step'];
 const STYLES = ['Cinematic Horror', 'Dark Finance Story', 'Anime Horror', 'Realistic Documentary', 'Brainrot Meme', 'Indian Suspense'];
 const ASPECTS = ['9:16 YouTube Shorts', '16:9 YouTube', '1:1 Social'];
+const PROXY_URLS = ['http://127.0.0.1:8787/api/generate', 'http://localhost:8787/api/generate'];
 
 function getPrompt(style, subject, aspect, duration) {
   const ratio = aspect.startsWith('9:16') ? 'vertical 9:16, 1080x1920' : aspect.startsWith('16:9') ? 'wide 16:9, 1920x1080' : 'square 1:1, 1080x1080';
@@ -12,6 +13,24 @@ function getPrompt(style, subject, aspect, duration) {
 
 function pretty(data) {
   return JSON.stringify(data, null, 2);
+}
+
+async function postToProxy(body) {
+  let lastError = null;
+  for (const url of PROXY_URLS) {
+    try {
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+      const data = await response.json();
+      return { response, data, url };
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  throw lastError || new Error('Could not reach local proxy.');
 }
 
 export default function App() {
@@ -76,14 +95,8 @@ export default function App() {
           }
         : buildPayload();
 
-      const response = await fetch('http://localhost:8787/api/generate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ provider, apiKey, modelId, comfyUrl, payload })
-      });
-
-      const data = await response.json();
-      setResult(pretty(data));
+      const { response, data, url } = await postToProxy({ provider, apiKey, modelId, comfyUrl, payload });
+      setResult(pretty({ proxyUrl: url, ...data }));
 
       if (!response.ok || data.ok === false) {
         setStatus('Error from API. Check the result box below.');
@@ -91,8 +104,8 @@ export default function App() {
         setStatus('Request sent successfully. If this is video, wait and open the status/output URL from the result.');
       }
     } catch (error) {
-      setStatus('Failed to reach local proxy. Make sure npm run dev started BOTH Vite and server.js.');
-      setResult(error.message || String(error));
+      setStatus('Local proxy is not running on port 8787. Start it in a separate CMD with: npm run server');
+      setResult(`Failed to reach local proxy.\n\nFix:\n1. Open a NEW CMD window\n2. cd C:\\Automation\\ai-video-generator\n3. npm run server\n4. Keep that CMD open\n5. Come back here and click Generate again\n\nTest link: http://127.0.0.1:8787/health\n\nError: ${error.message || String(error)}`);
     }
   }
 
@@ -102,7 +115,7 @@ export default function App() {
         <div>
           <p className="eyebrow">FAST AI IMAGE + VIDEO PANEL</p>
           <h1>Generate images and videos with APIs or local ComfyUI</h1>
-          <p className="subtitle">The browser calls your local Node proxy first, then the proxy calls Replicate, Hugging Face, Stability, or ComfyUI. This avoids Failed to fetch / CORS errors.</p>
+          <p className="subtitle">Keep two CMD windows open: one for <b>npm run server</b> and one for <b>npm run dev</b>. The website sends generation requests to the local proxy on port 8787.</p>
           <div className="tabs">
             <button className={tab === 'video' ? 'active' : ''} onClick={() => changeTab('video')}>Video</button>
             <button className={tab === 'image' ? 'active' : ''} onClick={() => changeTab('image')}>Image</button>
