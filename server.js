@@ -3,12 +3,13 @@ import cors from 'cors';
 
 const app = express();
 const PORT = process.env.PORT || 8787;
+const HOST = '127.0.0.1';
 
-app.use(cors());
+app.use(cors({ origin: ['http://127.0.0.1:5173', 'http://localhost:5173'] }));
 app.use(express.json({ limit: '25mb' }));
 
 app.get('/health', (req, res) => {
-  res.json({ ok: true, message: 'AI generation proxy running' });
+  res.json({ ok: true, message: 'AI generation proxy running locally only' });
 });
 
 async function forwardJson({ url, token, body, headers = {}, method = 'POST' }) {
@@ -123,6 +124,6 @@ app.post('/api/replicate-status', async (req, res) => {
   }
 });
 
-app.listen(PORT, () => {
-  console.log(`AI generation proxy running on http://localhost:${PORT}`);
+app.listen(PORT, HOST, () => {
+  console.log(`AI generation proxy running locally on http://${HOST}:${PORT}`);
 });
