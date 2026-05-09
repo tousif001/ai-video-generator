@@ -5,7 +5,9 @@ const app = express();
 const PORT = process.env.PORT || 8787;
 const HOST = '127.0.0.1';
 
-app.use(cors({ origin: ['http://127.0.0.1:5173', 'http://localhost:5173'] }));
+// Backend is bound to 127.0.0.1, so it is local-only.
+// Allowing CORS here avoids browser localhost/127.0.0.1 origin mismatch issues.
+app.use(cors());
 app.use(express.json({ limit: '25mb' }));
 
 app.get('/health', (req, res) => {
