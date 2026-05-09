@@ -6,6 +6,15 @@ const STYLES = ['Cinematic Horror', 'Dark Finance Story', 'Anime Horror', 'Reali
 const ASPECTS = ['9:16 YouTube Shorts', '16:9 YouTube', '1:1 Social'];
 const PROXY_URLS = ['http://127.0.0.1:8787/api/generate', 'http://localhost:8787/api/generate'];
 
+const FINANCE_SCRIPT = `He worked every day but still felt broke.
+At first, earning money felt exciting.
+Then small habits started leaking his money.
+Every harmless purchase became part of a bigger problem.
+One night, he checked his bank statement and understood the truth.
+He was not broke because he earned too little.
+He was broke because his money had no plan.
+Revenue is loud. Profit is silent. Save this before your next money decision.`;
+
 function getPrompt(style, subject, aspect, duration) {
   const ratio = aspect.startsWith('9:16') ? 'vertical 9:16, 1080x1920' : aspect.startsWith('16:9') ? 'wide 16:9, 1920x1080' : 'square 1:1, 1080x1080';
   return `${subject}. ${style}. ${ratio}. ${duration} seconds. cinematic lighting, detailed environment, realistic motion, strong atmosphere, sharp focus, smooth camera movement, no text, no watermark, no logo.`;
@@ -13,6 +22,28 @@ function getPrompt(style, subject, aspect, duration) {
 
 function pretty(data) {
   return JSON.stringify(data, null, 2);
+}
+
+function splitScriptIntoScenes(script, maxScenes = 8) {
+  const lines = script
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  if (lines.length === 0) return [];
+  if (lines.length <= maxScenes) return lines;
+
+  const scenes = [];
+  const chunkSize = Math.ceil(lines.length / maxScenes);
+  for (let i = 0; i < lines.length; i += chunkSize) {
+    scenes.push(lines.slice(i, i + chunkSize).join(' '));
+  }
+  return scenes.slice(0, maxScenes);
+}
+
+function makeScenePrompt({ line, index, projectTitle, style, aspect, sceneDuration }) {
+  const ratio = aspect.startsWith('9:16') ? 'vertical 9:16, 1080x1920' : aspect.startsWith('16:9') ? 'wide 16:9, 1920x1080' : 'square 1:1, 1080x1080';
+  return `Scene ${index + 1} for a text-to-video project titled "${projectTitle}". Voiceover line: "${line}". Create a ${sceneDuration}-second ${style.toLowerCase()} shot. ${ratio}. Visualize the meaning of the line through cinematic action, natural human expression, realistic motion, dramatic lighting, strong atmosphere, clean composition, no text on screen, no watermark, no logo. Camera movement should be smooth and intentional, with one clear subject and one clear emotional beat.`;
 }
 
 async function postToProxy(body) {
@@ -36,26 +67,37 @@ async function postToProxy(body) {
 export default function App() {
   const [tab, setTab] = useState('video');
   const [provider, setProvider] = useState('replicate-video');
-  const [style, setStyle] = useState('Cinematic Horror');
+  const [style, setStyle] = useState('Dark Finance Story');
   const [aspect, setAspect] = useState('9:16 YouTube Shorts');
   const [duration, setDuration] = useState('5');
-  const [subject, setSubject] = useState('A terrified young man walking alone through an abandoned hospital corridor at night');
+  const [subject, setSubject] = useState('A tired young man checking his bank balance at night, unpaid bills on the table, emotional finance story mood');
   const [negative, setNegative] = useState('low quality, blurry, distorted face, extra limbs, bad anatomy, text, watermark, logo, bad motion');
   const [apiKey, setApiKey] = useState(localStorage.getItem('ai_video_api_key') || '');
-  const [modelId, setModelId] = useState(localStorage.getItem('ai_video_model_id') || 'kwaivgi/kling-v1.6-standard');
+  const [modelId, setModelId] = useState(localStorage.getItem('ai_video_model_id') || 'minimax/video-01');
   const [comfyUrl, setComfyUrl] = useState(localStorage.getItem('comfy_url') || 'http://127.0.0.1:8188');
   const [customPayload, setCustomPayload] = useState('{\n  "input": {\n    "prompt": "{{PROMPT}}",\n    "negative_prompt": "{{NEGATIVE}}"\n  }\n}');
   const [status, setStatus] = useState('Ready');
   const [result, setResult] = useState('');
+  const [projectTitle, setProjectTitle] = useState('Revenue Is Loud, Profit Is Silent');
+  const [projectScript, setProjectScript] = useState(FINANCE_SCRIPT);
+  const [sceneDuration, setSceneDuration] = useState('5');
+  const [maxScenes, setMaxScenes] = useState('8');
 
   const prompt = useMemo(() => getPrompt(style, subject, aspect, duration), [style, subject, aspect, duration]);
   const examples = tab === 'video' ? VIDEO_MODELS : IMAGE_MODELS;
+
+  const projectScenes = useMemo(() => {
+    return splitScriptIntoScenes(projectScript, Number(maxScenes) || 8).map((line, index) => ({
+      line,
+      prompt: makeScenePrompt({ line, index, projectTitle, style, aspect, sceneDuration })
+    }));
+  }, [projectScript, maxScenes, projectTitle, style, aspect, sceneDuration]);
 
   function changeTab(nextTab) {
     setTab(nextTab);
     if (nextTab === 'video') {
       setProvider('replicate-video');
-      setModelId('kwaivgi/kling-v1.6-standard');
+      setModelId('minimax/video-01');
     } else {
       setProvider('stability-image');
       setModelId('');
@@ -69,9 +111,27 @@ export default function App() {
     setStatus('Settings saved locally in this browser.');
   }
 
+  async function copyText(text, message = 'Copied.') {
+    await navigator.clipboard.writeText(text);
+    setStatus(message);
+  }
+
   async function copyPrompt() {
-    await navigator.clipboard.writeText(prompt);
-    setStatus('Prompt copied.');
+    await copyText(prompt, 'Prompt copied.');
+  }
+
+  function useScenePrompt(scenePrompt) {
+    setTab('video');
+    setSubject(scenePrompt);
+    setDuration(sceneDuration);
+    setProvider('replicate-video');
+    setStatus('Scene prompt loaded into generator. Click Generate Video when ready.');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  async function copyAllScenes() {
+    const text = projectScenes.map((scene, index) => `SCENE ${index + 1}\nVOICEOVER: ${scene.line}\nPROMPT: ${scene.prompt}`).join('\n\n');
+    await copyText(text, 'All scene prompts copied.');
   }
 
   function buildPayload() {
@@ -114,8 +174,8 @@ export default function App() {
       <section className="hero">
         <div>
           <p className="eyebrow">FAST AI IMAGE + VIDEO PANEL</p>
-          <h1>Generate images and videos with APIs or local ComfyUI</h1>
-          <p className="subtitle">Keep two CMD windows open: one for <b>npm run server</b> and one for <b>npm run dev</b>. The website sends generation requests to the local proxy on port 8787.</p>
+          <h1>Generate text-to-video projects with scripts, scenes, and APIs</h1>
+          <p className="subtitle">Paste a project script, convert it into scene prompts, then generate each 5-second clip through Replicate, Hugging Face, Stability, or local ComfyUI.</p>
           <div className="tabs">
             <button className={tab === 'video' ? 'active' : ''} onClick={() => changeTab('video')}>Video</button>
             <button className={tab === 'image' ? 'active' : ''} onClick={() => changeTab('image')}>Image</button>
@@ -173,7 +233,7 @@ export default function App() {
               )}
               {provider === 'replicate-image' && (
                 <div className="exampleBox">
-                  <p className="note"><b>Important:</b> I removed unverified image examples. Replicate returns 404 if the slug is even slightly wrong. Open the model page on Replicate and copy the exact owner/model-name from the URL.</p>
+                  <p className="note"><b>Important:</b> Replicate returns 404 if the slug is wrong. Open the model page on Replicate and copy the exact owner/model-name from the URL.</p>
                 </div>
               )}
               {provider === 'stability-image' && (
@@ -201,6 +261,46 @@ export default function App() {
         </div>
       </section>
 
+      <section className="panel workflow">
+        <div className="topRow">
+          <h2>Project Script → Text-to-Video Scenes</h2>
+          <button onClick={copyAllScenes}>Copy All Scene Prompts</button>
+        </div>
+        <div className="grid">
+          <div className="controls">
+            <label>Project title
+              <input value={projectTitle} onChange={(e) => setProjectTitle(e.target.value)} />
+            </label>
+            <label>Scene duration
+              <input value={sceneDuration} onChange={(e) => setSceneDuration(e.target.value)} />
+            </label>
+            <label>Maximum scenes
+              <input value={maxScenes} onChange={(e) => setMaxScenes(e.target.value)} />
+            </label>
+            <button onClick={() => { setProjectScript(FINANCE_SCRIPT); setStyle('Dark Finance Story'); setAspect('9:16 YouTube Shorts'); }}>Load Finance Script</button>
+          </div>
+          <label>Paste full project script / voiceover lines
+            <textarea rows="10" value={projectScript} onChange={(e) => setProjectScript(e.target.value)} />
+          </label>
+        </div>
+
+        <div className="sceneList">
+          {projectScenes.map((scene, index) => (
+            <div className="sceneCard" key={`${scene.line}-${index}`}>
+              <div className="topRow">
+                <h3>Scene {index + 1}</h3>
+                <div className="tabs">
+                  <button onClick={() => useScenePrompt(scene.prompt)}>Use for Generate</button>
+                  <button onClick={() => copyText(scene.prompt, `Scene ${index + 1} prompt copied.`)}>Copy</button>
+                </div>
+              </div>
+              <p className="note"><b>Voiceover:</b> {scene.line}</p>
+              <pre>{scene.prompt}</pre>
+            </div>
+          ))}
+        </div>
+      </section>
+
       <section className="grid wideGrid">
         <div className="panel output">
           <div className="topRow">
@@ -225,7 +325,7 @@ export default function App() {
           <button className="generate" onClick={generate}>Generate {tab === 'video' ? 'Video' : 'Image'}</button>
         </div>
         <p className="status">Status: {status}</p>
-        <pre>{result || 'Result will appear here.'}</pre>
+        <pre>{result || 'Result will appear here. For a full project, generate one scene at a time and combine the clips in CapCut.'}</pre>
       </section>
     </main>
   );
