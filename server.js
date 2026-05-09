@@ -42,6 +42,39 @@ async function forwardJson({ url, token, body, headers = {}, method = 'POST' }) 
   };
 }
 
+async function forwardStabilityImage({ url, token, payload = {} }) {
+  const form = new FormData();
+  form.append('prompt', payload.prompt || '');
+  if (payload.negative_prompt) form.append('negative_prompt', payload.negative_prompt);
+  form.append('aspect_ratio', payload.aspect_ratio || '1:1');
+  form.append('output_format', payload.output_format || 'png');
+
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      Accept: 'application/json'
+    },
+    body: form
+  });
+
+  const text = await response.text();
+  let data;
+  try {
+    data = JSON.parse(text);
+  } catch {
+    data = text;
+  }
+
+  return {
+    ok: response.ok,
+    status: response.status,
+    statusText: response.statusText,
+    requestUrl: url,
+    data
+  };
+}
+
 function isReplicateVersionHash(value) {
   return /^[a-f0-9]{32,}$/i.test(String(value || '').trim());
 }
@@ -102,11 +135,10 @@ app.post('/api/generate', async (req, res) => {
 
     if (provider === 'stability-image') {
       if (!apiKey) return res.status(400).json({ error: 'Missing Stability API key' });
-      const result = await forwardJson({
+      const result = await forwardStabilityImage({
         url: 'https://api.stability.ai/v2beta/stable-image/generate/core',
         token: apiKey,
-        headers: { Accept: 'application/json' },
-        body: payload || {}
+        payload: payload || {}
       });
       return res.status(result.ok ? 200 : result.status).json(result);
     }
