@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 
 const VIDEO_MODELS = ['kwaivgi/kling-v1.6-standard', 'minimax/video-01', 'lucataco/hunyuan-video'];
-const IMAGE_MODELS = ['black-forest-labs/flux-schnell', 'stability-ai/sdxl', 'bytedance/sdxl-lightning-4step'];
+const IMAGE_MODELS = ['black-forest-labs/flux-schnell', 'stability-ai/stable-diffusion', 'fofr/sdxl-lightning'];
 const STYLES = ['Cinematic Horror', 'Dark Finance Story', 'Anime Horror', 'Realistic Documentary', 'Brainrot Meme', 'Indian Suspense'];
 const ASPECTS = ['9:16 YouTube Shorts', '16:9 YouTube', '1:1 Social'];
 const PROXY_URLS = ['http://127.0.0.1:8787/api/generate', 'http://localhost:8787/api/generate'];
