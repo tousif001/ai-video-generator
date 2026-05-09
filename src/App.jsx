@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 
 const VIDEO_MODELS = ['kwaivgi/kling-v1.6-standard', 'minimax/video-01', 'lucataco/hunyuan-video'];
-const IMAGE_MODELS = ['black-forest-labs/flux-schnell', 'stability-ai/stable-diffusion', 'fofr/sdxl-lightning'];
+const IMAGE_MODELS = [];
 const STYLES = ['Cinematic Horror', 'Dark Finance Story', 'Anime Horror', 'Realistic Documentary', 'Brainrot Meme', 'Indian Suspense'];
 const ASPECTS = ['9:16 YouTube Shorts', '16:9 YouTube', '1:1 Social'];
 const PROXY_URLS = ['http://127.0.0.1:8787/api/generate', 'http://localhost:8787/api/generate'];
@@ -57,8 +57,8 @@ export default function App() {
       setProvider('replicate-video');
       setModelId('kwaivgi/kling-v1.6-standard');
     } else {
-      setProvider('replicate-image');
-      setModelId('black-forest-labs/flux-schnell');
+      setProvider('stability-image');
+      setModelId('');
     }
   }
 
@@ -155,9 +155,9 @@ export default function App() {
               {tab === 'video' && <option value="replicate-video">Replicate Video</option>}
               {tab === 'video' && <option value="huggingface-video">Hugging Face Video</option>}
               {tab === 'video' && <option value="comfyui-local">Local ComfyUI</option>}
-              {tab === 'image' && <option value="replicate-image">Replicate Image</option>}
+              {tab === 'image' && <option value="stability-image">Stability Image - recommended</option>}
+              {tab === 'image' && <option value="replicate-image">Replicate Image - paste verified model slug only</option>}
               {tab === 'image' && <option value="huggingface-image">Hugging Face Image</option>}
-              {tab === 'image' && <option value="stability-image">Stability Image</option>}
             </select>
           </label>
 
@@ -166,15 +166,29 @@ export default function App() {
               <label>API key/token
                 <input type="password" value={apiKey} onChange={(e) => setApiKey(e.target.value)} placeholder="Paste API token" />
               </label>
-              <label>Model slug or version hash
-                <input value={modelId} onChange={(e) => setModelId(e.target.value)} placeholder="owner/model-name" />
-              </label>
-              <div className="exampleBox">
-                <p className="note"><b>Examples:</b></p>
-                <div className="exampleBtns">
-                  {examples.map((item) => <button key={item} onClick={() => setModelId(item)}>{item}</button>)}
+              {provider !== 'stability-image' && (
+                <label>Model slug or version hash
+                  <input value={modelId} onChange={(e) => setModelId(e.target.value)} placeholder="Copy exact slug from provider page, like owner/model-name" />
+                </label>
+              )}
+              {provider === 'replicate-image' && (
+                <div className="exampleBox">
+                  <p className="note"><b>Important:</b> I removed unverified image examples. Replicate returns 404 if the slug is even slightly wrong. Open the model page on Replicate and copy the exact owner/model-name from the URL.</p>
                 </div>
-              </div>
+              )}
+              {provider === 'stability-image' && (
+                <div className="exampleBox">
+                  <p className="note"><b>Recommended for images:</b> Stability Image does not need a model slug. Just paste your Stability API key and click Generate Image.</p>
+                </div>
+              )}
+              {provider === 'replicate-video' && examples.length > 0 && (
+                <div className="exampleBox">
+                  <p className="note"><b>Video examples:</b></p>
+                  <div className="exampleBtns">
+                    {examples.map((item) => <button key={item} onClick={() => setModelId(item)}>{item}</button>)}
+                  </div>
+                </div>
+              )}
             </>
           )}
 
